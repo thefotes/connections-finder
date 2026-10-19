@@ -1,0 +1,27 @@
+# Secrets
+.env
+.env.local
+
+# Your personal inputs and configuration (copy the *.example files)
+input/
+settings.yaml
+profile.md
+manual-boards.yaml
+*.zip
+*.pdf
+
+# Pipeline artifacts, caches, the outreach database and the generated report
+data/
+report.html
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/

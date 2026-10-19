@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connections Finder</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>Connections Finder <span class="count" id="genmeta"></span></h1>
+  <div class="sub" id="statline"></div>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="leadership">Leadership roles</div>
+    <div class="tab" data-tab="ic">IC roles</div>
+    <div class="tab" data-tab="recruiters">Recruiters</div>
+  </div>
+  <div class="controls" id="controls">
+    <input type="search" id="q" placeholder="search company, title, connection, rationale…">
+    <span class="chip" data-f="tier_1">Remote (US)</span>
+    <span class="chip" data-f="tier_2">Onsite metro</span>
+    <span class="chip" data-f="hasband">Has comp band</span>
+    <span class="chip" data-f="flagged">Industry flag</span>
+    <span class="chip" data-f="hidecontacted">Hide contacted</span>
+    <label class="muted">min score <select id="minscore">
+      <option value="0">0</option><option value="10">10</option><option value="20">20</option>
+      <option value="30">30</option><option value="40">40</option><option value="50">50</option>
+      <option value="60">60</option></select></label>
+  </div>
+</header>
+<main>
+  <table id="grid"><thead id="head"></thead><tbody id="body"></tbody></table>
+</main>
+<div id="overlay" class="overlay" style="display:none">
+  <div class="panel" id="panel"></div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

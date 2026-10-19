@@ -1,0 +1,43 @@
+# Copy to settings.yaml (gitignored) and fill in. Everything here is about YOU;
+# scoring weights live in config.py and the role-scoring rubric in profile.md.
+
+# Your own LinkedIn profile URL, so your side of each DM thread is not counted as a
+# contact. Optional: if blank, it is auto-detected as the URL that appears in the most
+# rows of messages.csv.
+linkedin_url: ""
+
+# Your employment history. A connection whose "Connected On" date falls inside one of
+# these windows is probably a former colleague, which boosts their score. `weight` (0..1)
+# says how much that era counts; give your most relevant recent employer 1.0.
+# Dates are YYYY-MM; `end` may be "present". Overlapping windows: the highest weight wins.
+employers:
+  - name: Example Corp
+    start: 2019-06
+    end: present
+    weight: 1.0
+  - name: Previous Co
+    start: 2015-01
+    end: 2019-05
+    weight: 0.6
+
+# Companies whose open roles should never be listed (e.g. your current employer, or
+# one that just laid you off). People there still appear in the recruiter list.
+# Staffing agencies are excluded separately in config.py (STAFFING_AGENCIES).
+excluded_companies:
+  - Example Corp
+
+# Location filter (US only). Remote US roles are always eligible ("tier 1").
+location:
+  # Remote roles restricted to a list of states are dropped unless your state is listed.
+  home_state: new york
+  home_state_abbr: ny
+  # Onsite/hybrid roles matching any of these regexes are eligible ("tier 2", ranked
+  # below remote). Leave the list empty to consider remote roles only.
+  onsite_metro_patterns:
+    - new york city
+    - new york, ?ny
+    - nyc
+    - manhattan
+    - brooklyn
+    - jersey city
+    - hoboken

@@ -1,0 +1,33 @@
+# Hand-mapped job boards — the escape hatch for anything auto-discovery misses.
+#
+# Paste a careers URL out of your browser and re-run `uv run python run_all.py 2`.
+# The provider is inferred from the host, so any of these shapes work:
+#
+#   https://capitalone.wd12.myworkdayjobs.com/Capital_One          (Workday)
+#   https://boards.greenhouse.io/willowtree                        (Greenhouse)
+#   https://jobs.lever.co/impel                                    (Lever)
+#   https://jobs.ashbyhq.com/datavant                              (Ashby)
+#   https://careers.smartrecruiters.com/Bosch                      (SmartRecruiters)
+#   https://mobiquity.recruitee.com                                (Recruitee)
+#
+# For a Workday URL, open the company's careers page and copy the address bar. It looks
+# like {tenant}.wd{N}.myworkdayjobs.com/{en-US/}{SiteName} — all three parts are read out
+# of the URL, so no editing is needed.
+#
+# Entries here are checked BEFORE any probing and override auto-discovery, which makes
+# this also the way to correct a board that resolved to the wrong company.
+#
+# They are NOT exempt from verification . A pasted URL proves you looked at a
+# page; it is not evidence about which company operates the board, and a typo that still
+# returns HTTP 200 is precisely the failure this catches. If an entry gets rejected it
+# shows up in data/02-unresolved.csv with the verifier's reason.
+#
+# `skip: true` (no url) means "never spend probe budget on this company" — use it for
+#
+# Copy this file to manual-boards.yaml (gitignored) to use it.
+
+boards:
+  - company: Example Company
+    url: https://boards.greenhouse.io/examplecompany
+  # - company: Some Staffing Agency
+  #   skip: true
