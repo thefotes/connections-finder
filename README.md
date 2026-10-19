@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/hero.png" alt="Connections Finder: LinkedIn connections in, open roles and recruiters to contact out" width="100%">
+</p>
+
 # Connections Finder
 
 Turn your LinkedIn connections export into a ranked list of open roles **at companies
