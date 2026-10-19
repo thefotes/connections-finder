@@ -10,9 +10,12 @@ write, and ranks the result by role fit × how strong your connection there is. 
 is a single self-contained `report.html` and an optional local web app for tracking who
 you have reached out to.
 
-It is a single-user tool that runs on your own machine. The default title filter targets
-**software engineering roles** (Senior/Staff IC and engineering management); see
-[Customizing](#customizing) for other roles.
+It is a single-user tool that runs on your own machine. The title filter keeps only
+postings whose role matches one of your **target-role tracks**, configured in
+`settings.yaml`; without a `tracks:` section you get the built-in software-engineering
+tracks (Engineering leadership and Senior/Staff software engineering), which use a fast
+regex path. Custom tracks send each distinct title to the LLM once (cached) instead. See
+[Customizing](#customizing).
 
 Pairs well with [job-matcher](https://github.com/thefotes/job-matcher), an MCP server that
 lets your AI agent evaluate and track postings; it can import `data/02-boards.jsonl`.
@@ -113,10 +116,12 @@ them to tune the filters.
   de-boost patterns).
 - **Boards auto-discovery missed**: copy `manual-boards.example.yaml` to
   `manual-boards.yaml` and paste careers URLs, then re-run from stage 2.
-- **Other kinds of roles**: the title classifier in `pipeline/classify.py`
-  (`classify_titles`) buckets postings into `leadership` / `ic` / `reject` with regexes
-  for software engineering titles and an LLM prompt for the rest. Adjust those patterns
-  and the prompt for your field.
+- **Target roles (tracks)**: configure `tracks` in `settings.yaml` — a list of named
+  tracks, each with example `titles` (and optional `exclude` words and
+  `manages_people`). Omitting it gives the built-in software-engineering tracks, which
+  use a regex fast path; custom tracks send each distinct title to the LLM once (cached),
+  so re-runs stay free. The stage 4 filter keeps only postings whose role matches one of
+  your tracks.
 
 ## Privacy
 

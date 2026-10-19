@@ -82,6 +82,7 @@ def bootstrap() -> dict:
     return {
         "meta": data.get("meta", {}),
         "stats": data.get("stats", {}),
+        "tracks": data.get("tracks", []),
         "roles": roles,
         "recruiters": recruiters,
         "outreaches": outreaches,

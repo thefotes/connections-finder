@@ -16,6 +16,7 @@ import sqlite3
 from pathlib import Path
 
 import config
+from pipeline import settings
 from pipeline.common import DATA, ROOT, log, read_jsonl, write_json
 
 _ML_TITLE_RE = [re.compile(p, re.I) for p in config.ML_TITLE_PATTERNS]
@@ -142,7 +143,7 @@ def main() -> None:
             "ml_deboost_reason": ml_reason,
             "outreach_status": outreach_status,
             "outreach_deboosted": outreach_deboosted,
-            "tab": "leadership" if r["title_bucket"] == "leadership" else "ic",
+            "tab": r["title_bucket"],
             "company": r["company"],
             "company_normalized": r["company_normalized"],
             "title": r["title"],
@@ -197,11 +198,15 @@ def main() -> None:
             "why_ranked": r.get("why_ranked", ""),
         })
 
+    tracks = [{"id": t.id, "name": t.name, "manages_people": t.manages_people}
+              for t in settings.load().tracks]
+    by_track = {}
+    for r in out_roles:
+        by_track[r["tab"]] = by_track.get(r["tab"], 0) + 1
     stats = {
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "roles_total": len(out_roles),
-        "leadership": sum(1 for r in out_roles if r["tab"] == "leadership"),
-        "ic": sum(1 for r in out_roles if r["tab"] == "ic"),
+        "by_track": {t["id"]: by_track.get(t["id"], 0) for t in tracks},
         "tier_1": sum(1 for r in out_roles if r["location_tier"] == "tier_1"),
         "tier_2": sum(1 for r in out_roles if r["location_tier"] == "tier_2"),
         "recruiters_total": len(rec_view),
@@ -229,12 +234,14 @@ def main() -> None:
             },
         },
         "stats": stats,
+        "tracks": tracks,
         "roles": out_roles,
         "recruiters": rec_view,
     }
     write_json(DATA / "06-final.json", final)
+    by_track_str = " ".join(f"{tid}={n}" for tid, n in stats["by_track"].items())
     log(f"Stage 6: wrote data/06-final.json (roles={stats['roles_total']} "
-        f"leadership={stats['leadership']} ic={stats['ic']} recruiters={stats['recruiters_total']})")
+        f"{by_track_str} recruiters={stats['recruiters_total']})")
 
     render_report(final, ROOT / "report.html")
     log("Stage 6: wrote report.html")
@@ -298,11 +305,7 @@ _REPORT_TEMPLATE = r"""<!doctype html>
 <header>
   <h1>Connections Finder <span class="count" id="genmeta"></span></h1>
   <div class="sub" id="statline"></div>
-  <div class="tabs" id="tabs">
-    <div class="tab active" data-tab="leadership">Leadership roles</div>
-    <div class="tab" data-tab="ic">IC roles</div>
-    <div class="tab" data-tab="recruiters">Recruiters</div>
-  </div>
+  <div class="tabs" id="tabs"></div>
   <div class="controls" id="controls">
     <input type="search" id="q" placeholder="search company, title, connection, rationale…">
     <span class="chip" data-f="tier_1">Remote (US)</span>
@@ -321,26 +324,35 @@ _REPORT_TEMPLATE = r"""<!doctype html>
 </main>
 <script id="data" type="application/json">/*__DATA__*/</script>
 <script>
-const DATA = JSON.parse(document.getElementById('data').textContent);
+let DATA = JSON.parse(document.getElementById('data').textContent);
 const LS = 'cf_contacted_v1';
 let contacted = {};
 try { contacted = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e){}
-let tab = 'leadership';
+const TRACKS = DATA.tracks || [];
+const trackOf = id => TRACKS.find(t => t.id === id);
+let tab = TRACKS[0] ? TRACKS[0].id : 'recruiters';
 const filters = new Set();
 const q = document.getElementById('q');
 const minscore = document.getElementById('minscore');
 
 document.getElementById('genmeta').textContent = '· generated ' + (DATA.meta.generated_at||'');
 const s = DATA.stats;
+const byTrack = s.by_track || {};
 document.getElementById('statline').textContent =
-  `${s.roles_total} roles (${s.leadership} leadership · ${s.ic} IC) · ` +
+  `${s.roles_total} roles (${TRACKS.map(t => `${byTrack[t.id] ?? 0} ${t.name}`).join(' · ')}) · ` +
   `${s.tier_1} remote-US · ${s.tier_2} onsite metro · ${s.recruiters_total} recruiters · ` +
   `${s.industry_flagged} industry-flagged`;
 
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-  t.classList.add('active'); tab = t.dataset.tab; render();
-});
+function buildTabs(){
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = TRACKS.map((t,i) =>
+      `<div class="tab${i===0?' active':''}" data-tab="${t.id}">${esc(t.name)}</div>`
+    ).join('') + '<div class="tab" data-tab="recruiters">Recruiters</div>';
+  tabs.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+    tabs.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active'); tab = t.dataset.tab; render();
+  });
+}
 document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
   c.classList.toggle('on');
   filters.has(c.dataset.f) ? filters.delete(c.dataset.f) : filters.add(c.dataset.f);
@@ -429,7 +441,7 @@ function detailHtml(r){
   return `<div class="kv">
     <div>Final score</div><div>${r.final_score.toFixed(2)} &nbsp;<span class="muted">= conn_factor(${r.company_connection_score}) × role ${r.role_score} × loc ${r.location_tier}</span></div>
     <div>Role sub-scores</div><div>domain ${r.domain_match} · scope ${r.scope_match} · industry ${r.industry_fit} · comp ${r.comp_signal} · LLM overall ${r.overall_score_llm}</div>
-    <div>Seniority read</div><div>${esc(r.seniority_read||'')} · manages managers: ${r.manages_managers}</div>
+    <div>Seniority read</div><div>${esc(r.seniority_read||'')}${trackOf(r.tab)?.manages_people?` · manages managers: ${r.manages_managers}`:''}</div>
     <div>Location</div><div>${esc(r.location_raw||'')} <span class="muted">(${esc(r.location_reason||'')})</span></div>
     <div>Comp</div><div>${band(r)} <span class="muted">${esc(r.compensation_raw||'')}</span></div>
     <div>Posted</div><div class="muted">${esc(r.posted_at||'')}</div>
@@ -488,6 +500,7 @@ function toggleContacted(k){
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>(
   {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+buildTabs();
 render();
 </script>
 </body>

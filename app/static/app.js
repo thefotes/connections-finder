@@ -1,12 +1,26 @@
 /* Connections Finder board — vanilla JS, no build step.
-   Ports the report.html UI (three tabs, search, chips, min-score, expandable
-   rows) and adds outreach logging backed by data/outreach.db. */
+   Ports the report.html UI (dynamic track tabs, search, chips, min-score,
+   expandable rows) and adds outreach logging backed by data/outreach.db. */
 
-let DATA = null;      // bootstrap payload: roles, recruiters, outreaches
-let tab = 'leadership';
+let DATA = null;      // bootstrap payload: tracks, roles, recruiters, outreaches
+let tab = 'recruiters';
 const filters = new Set();
 const q = document.getElementById('q');
 const minscore = document.getElementById('minscore');
+
+const TRACKS = () => DATA?.tracks || [];
+const trackOf = id => TRACKS().find(t => t.id === id);
+
+function buildTabs(){
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = TRACKS().map((t,i) =>
+      `<div class="tab${i===0?' active':''}" data-tab="${t.id}">${esc(t.name)}</div>`
+    ).join('') + '<div class="tab" data-tab="recruiters">Recruiters</div>';
+  tabs.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+    tabs.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active'); tab = t.dataset.tab; render();
+  });
+}
 
 async function load() {
   const res = await fetch('/api/bootstrap');
@@ -18,10 +32,14 @@ async function load() {
   DATA = await res.json();
   document.getElementById('genmeta').textContent = '· generated ' + (DATA.meta.generated_at || '');
   const s = DATA.stats || {};
+  const byTrack = s.by_track || {};
   document.getElementById('statline').textContent =
-    `${s.roles_total ?? DATA.roles.length} roles (${s.leadership ?? 0} leadership · ${s.ic ?? 0} IC) · ` +
+    `${s.roles_total ?? DATA.roles.length} roles (` +
+    `${TRACKS().map(t => `${byTrack[t.id] ?? 0} ${t.name}`).join(' · ')}) · ` +
     `${s.tier_1 ?? 0} remote-US · ${s.tier_2 ?? 0} onsite metro · ${s.recruiters_total ?? DATA.recruiters.length} recruiters · ` +
     `${s.industry_flagged ?? 0} industry-flagged`;
+  buildTabs();
+  tab = TRACKS()[0] ? TRACKS()[0].id : tab;
   render();
 }
 
@@ -50,10 +68,6 @@ function outreachBadge(r){
 }
 
 // -- tabs / filters / sort ---------------------------------------------------
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-  t.classList.add('active'); tab = t.dataset.tab; render();
-});
 document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
   c.classList.toggle('on');
   filters.has(c.dataset.f) ? filters.delete(c.dataset.f) : filters.add(c.dataset.f);
@@ -146,7 +160,7 @@ function detailHtml(r){
   return `<div class="kv">
     <div>Final score</div><div>${r.final_score.toFixed(2)} &nbsp;<span class="muted">= conn_factor(${r.company_connection_score}) × role ${r.role_score} × loc ${r.location_tier}</span></div>
     <div>Role sub-scores</div><div>domain ${r.domain_match} · scope ${r.scope_match} · industry ${r.industry_fit} · comp ${r.comp_signal} · LLM overall ${r.overall_score_llm}</div>
-    <div>Seniority read</div><div>${esc(r.seniority_read||'')} · manages managers: ${r.manages_managers}</div>
+    <div>Seniority read</div><div>${esc(r.seniority_read||'')}${trackOf(r.tab)?.manages_people?` · manages managers: ${r.manages_managers}`:''}</div>
     <div>Location</div><div>${esc(r.location_raw||'')} <span class="muted">(${esc(r.location_reason||'')})</span></div>
     <div>Comp</div><div>${band(r)} <span class="muted">${esc(r.compensation_raw||'')}</span></div>
     <div>Posted</div><div class="muted">${esc(r.posted_at||'')}</div>

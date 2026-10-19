@@ -42,6 +42,20 @@ class Employer:
     weight: float     # 0..1, how strongly a connection from this era counts
 
 
+# Built-in tracks when settings.yaml has no `tracks` key. The ids are hard-coded (not
+# slugs of the names) so existing artifacts keep their meaning.
+DEFAULT_TRACKS = (
+    Track(id="leadership", name="Engineering leadership", manages_people=True,
+          titles=("Engineering Manager", "Senior Engineering Manager",
+                  "Director of Engineering", "Senior Director of Engineering",
+                  "Head of Engineering", "VP Engineering", "SVP Engineering", "CTO"),
+          exclude=()),
+    Track(id="ic", name="Senior/Staff software engineering", manages_people=False,
+          titles=("Senior Software Engineer", "Staff Software Engineer"),
+          exclude=()),
+)
+
+
 @dataclass(frozen=True)
 class Settings:
     linkedin_url: str = ""
@@ -50,7 +64,7 @@ class Settings:
     home_state: str = ""            # full US state name, lowercase, e.g. "new york"
     home_state_abbr: str = ""       # e.g. "ny"
     onsite_metro_patterns: tuple[str, ...] = field(default_factory=tuple)
-    tracks: tuple[Track, ...] = field(default_factory=tuple)
+    tracks: tuple[Track, ...] = DEFAULT_TRACKS
     _tracks_custom: bool = False  # user supplied `tracks` (vs built-in DEFAULT_TRACKS)
 
     @property
@@ -90,20 +104,6 @@ def _month(v, *, end: bool) -> date:
         return date(y, m, 1)
     nxt = date(y + (m == 12), m % 12 + 1, 1)
     return date.fromordinal(nxt.toordinal() - 1)
-
-
-# Built-in tracks when settings.yaml has no `tracks` key. The ids are hard-coded (not
-# slugs of the names) so existing artifacts keep their meaning.
-DEFAULT_TRACKS = (
-    Track(id="leadership", name="Engineering leadership", manages_people=True,
-          titles=("Engineering Manager", "Senior Engineering Manager",
-                  "Director of Engineering", "Senior Director of Engineering",
-                  "Head of Engineering", "VP Engineering", "SVP Engineering", "CTO"),
-          exclude=()),
-    Track(id="ic", name="Senior/Staff software engineering", manages_people=False,
-          titles=("Senior Software Engineer", "Staff Software Engineer"),
-          exclude=()),
-)
 
 
 def _parse_tracks(raw: dict) -> tuple[Track, ...]:

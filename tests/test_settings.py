@@ -86,6 +86,14 @@ def test_default_tracks_when_absent():
     assert s.tracks[0].manages_people and not s.tracks[1].manages_people
 
 
+def test_bare_settings_have_default_tracks():
+    # settings.load() returns Settings() when settings.yaml is missing; it must
+    # still carry the built-in tracks so nothing downstream rejects everything.
+    s = settings.Settings()
+    assert not s.custom_tracks
+    assert [t.id for t in s.tracks] == ["leadership", "ic"]
+
+
 def test_custom_tracks_parse():
     s = settings.parse({"tracks": [
         {"name": "Engineering leadership", "titles": ["Engineering Manager"],

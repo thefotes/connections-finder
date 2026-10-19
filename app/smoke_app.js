@@ -84,9 +84,11 @@ function rowCount(){ return (elements.body._rows || 0) + elements.body.children.
   assert(DATA.roles.length === payload.roles.length,
     `all roles loaded (${DATA ? DATA.roles.length : 0})`);
 
-  for (const [t, expect] of [['leadership', payload.roles.filter(r=>r.tab==='leadership').length],
-                             ['ic',         payload.roles.filter(r=>r.tab==='ic').length],
-                             ['recruiters', payload.recruiters.length]]) {
+  const tabs = [['recruiters', payload.recruiters.length]];
+  for (const t of payload.tracks || []) {
+    tabs.unshift([t.id, payload.roles.filter(r=>r.tab===t.id).length]);
+  }
+  for (const [t, expect] of tabs) {
     elements.body.innerHTML = '';
     elements.body.children = [];
     api.setTab(t); api.render();

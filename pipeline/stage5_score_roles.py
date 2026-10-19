@@ -71,8 +71,7 @@ def build_prompt(profile_md: str, job: dict) -> str:
     track = _track_for(job.get("title_bucket"))
     track_line = (f"{track.name} — titles: {', '.join(track.titles)}" if track
                   else str(job.get("title_bucket")))
-    manages = (f"yes (a people-management track)" if track and track.manages_people
-               else "no")
+    manages = "yes (a people-management track)" if track and track.manages_people else "no"
     return (
         f"=== CANDIDATE PROFILE & RUBRIC (profile.md) ===\n{profile_md}\n\n"
         f"=== JOB POSTING ===\n"

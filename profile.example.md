@@ -17,16 +17,19 @@ settings live in `settings.yaml`, not here.
 
 ## What I am looking for
 
-### Target roles — LEADERSHIP track
+### Target roles — LEADERSHIP track (your "Engineering leadership" track in settings.yaml)
 
 - Engineering Manager (floor: include, but weight below the rest)
 - Senior Engineering Manager
 - Director of Engineering
 
-### Target roles — IC track (ranked separately)
+### Target roles — IC track (ranked separately; your "Senior/Staff software engineering" track)
 
 - Senior Software Engineer
 - Staff Software Engineer
+
+The headings above are your tracks from `settings.yaml`; they must match it, since
+stage 4 only keeps postings classified into a configured track.
 
 ### Location
 

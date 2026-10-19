@@ -65,16 +65,13 @@ try {
   const api = fn(document, window, localStorage, console);
   assert(api.DATA.roles.length === embedded.roles.length, 'DATA.roles wired');
 
-  // leadership tab
-  api.setTab('leadership'); api.render();
-  const leadRows = (elements.body._rows || 0) + elements.body.children.length;
-  assert(leadRows > 0 || embedded.stats.leadership === 0,
-    `leadership tab renders rows (${leadRows})`);
-
-  // ic tab
-  api.setTab('ic'); api.render();
-  const icRows = (elements.body._rows || 0) + elements.body.children.length;
-  assert(icRows > 0 || embedded.stats.ic === 0, `ic tab renders rows (${icRows})`);
+  // one tab per track (in settings order), then recruiters
+  for (const t of embedded.tracks || []) {
+    api.setTab(t.id); api.render();
+    const rows = (elements.body._rows || 0) + elements.body.children.length;
+    assert(rows > 0 || (embedded.stats.by_track || {})[t.id] === 0,
+      `${t.id} tab renders rows (${rows})`);
+  }
 
   // recruiters tab
   api.setTab('recruiters'); api.render();
@@ -89,7 +86,7 @@ try {
     'no external <script src>/<link href> (self-contained)');
 
   // listing links render as anchors in the roles tables
-  api.setTab('leadership'); api.render();
+  api.setTab((embedded.tracks || [])[0]?.id); api.render();
   const anchorRows = elements.body.children.filter(
     c => (c._html||'').includes('href=') && (c._html||'').includes('open'));
   assert(anchorRows.length > 0, `role rows carry a clickable listing link (${anchorRows.length})`);
