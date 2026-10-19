@@ -6,6 +6,8 @@ to exclude, and where they will work onsite. `config.py` holds the scoring weigh
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -18,6 +20,17 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_PATH = ROOT / "settings.yaml"
 EXAMPLE_PATH = ROOT / "settings.example.yaml"
+
+_RESERVED_TRACK_IDS = {"reject", "recruiters"}
+
+
+@dataclass(frozen=True)
+class Track:
+    id: str                       # slug used in artifacts, e.g. "engineering_leadership"
+    name: str                     # display name, e.g. "Engineering leadership"
+    titles: tuple[str, ...]       # example titles that are this track
+    exclude: tuple[str, ...]      # titles/words that are NOT this track
+    manages_people: bool          # roles in this track manage people
 
 
 @dataclass(frozen=True)
@@ -37,6 +50,21 @@ class Settings:
     home_state: str = ""            # full US state name, lowercase, e.g. "new york"
     home_state_abbr: str = ""       # e.g. "ny"
     onsite_metro_patterns: tuple[str, ...] = field(default_factory=tuple)
+    tracks: tuple[Track, ...] = field(default_factory=tuple)
+    _tracks_custom: bool = False  # user supplied `tracks` (vs built-in DEFAULT_TRACKS)
+
+    @property
+    def custom_tracks(self) -> bool:
+        """True when the user supplied their own tracks (vs the built-in SWE ones)."""
+        return self._tracks_custom
+
+    @property
+    def tracks_fingerprint(self) -> str:
+        payload = [{"id": t.id, "name": t.name, "titles": list(t.titles),
+                    "exclude": list(t.exclude), "manages_people": t.manages_people}
+                   for t in self.tracks]
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
     @property
     def onsite_metro_re(self) -> re.Pattern | None:
@@ -64,6 +92,45 @@ def _month(v, *, end: bool) -> date:
     return date.fromordinal(nxt.toordinal() - 1)
 
 
+# Built-in tracks when settings.yaml has no `tracks` key. The ids are hard-coded (not
+# slugs of the names) so existing artifacts keep their meaning.
+DEFAULT_TRACKS = (
+    Track(id="leadership", name="Engineering leadership", manages_people=True,
+          titles=("Engineering Manager", "Senior Engineering Manager",
+                  "Director of Engineering", "Senior Director of Engineering",
+                  "Head of Engineering", "VP Engineering", "SVP Engineering", "CTO"),
+          exclude=()),
+    Track(id="ic", name="Senior/Staff software engineering", manages_people=False,
+          titles=("Senior Software Engineer", "Staff Software Engineer"),
+          exclude=()),
+)
+
+
+def _parse_tracks(raw: dict) -> tuple[Track, ...]:
+    tracks_raw = raw.get("tracks") or []
+    if not tracks_raw:
+        return DEFAULT_TRACKS
+    tracks, seen = [], set()
+    for i, t in enumerate(tracks_raw):
+        name = str(t.get("name") or "").strip()
+        titles = tuple(str(x).strip() for x in (t.get("titles") or []) if str(x).strip())
+        if not name:
+            raise ValueError(f"tracks[{i}]: every track needs a non-empty name")
+        if not titles:
+            raise ValueError(f"tracks[{i}] ({name!r}): at least one title is required")
+        tid = _slug(name)
+        if tid in _RESERVED_TRACK_IDS:
+            raise ValueError(f"tracks[{i}] ({name!r}): track id {tid!r} is reserved")
+        if tid in seen:
+            raise ValueError(f"tracks[{i}]: duplicate track id {tid!r}")
+        seen.add(tid)
+        tracks.append(Track(
+            id=tid, name=name, titles=titles,
+            exclude=tuple(str(x).strip() for x in (t.get("exclude") or []) if str(x).strip()),
+            manages_people=bool(t.get("manages_people", False))))
+    return tuple(tracks)
+
+
 def parse(raw: dict) -> Settings:
     raw = raw or {}
     employers = []
@@ -80,6 +147,8 @@ def parse(raw: dict) -> Settings:
         home_state=(loc.get("home_state") or "").strip().lower(),
         home_state_abbr=(loc.get("home_state_abbr") or "").strip().lower(),
         onsite_metro_patterns=tuple(loc.get("onsite_metro_patterns") or ()),
+        tracks=_parse_tracks(raw),
+        _tracks_custom=bool(raw.get("tracks")),
     )
 
 

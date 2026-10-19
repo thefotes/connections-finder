@@ -77,3 +77,43 @@ def test_state_allow_list_needs_home_state(user):
     assert stage4_filter.classify_location("Remote", desc)["location_tier"] == "reject"
     desc_ok = "This remote role is open to candidates in the following states: TX, OH, WA."
     assert stage4_filter.classify_location("Remote", desc_ok)["location_tier"] == "tier_1"
+
+
+def test_default_tracks_when_absent():
+    s = settings.parse({})
+    assert not s.custom_tracks
+    assert [t.id for t in s.tracks] == ["leadership", "ic"]
+    assert s.tracks[0].manages_people and not s.tracks[1].manages_people
+
+
+def test_custom_tracks_parse():
+    s = settings.parse({"tracks": [
+        {"name": "Engineering leadership", "titles": ["Engineering Manager"],
+         "manages_people": True},
+        {"name": "Senior IC", "titles": ["Senior Software Engineer"],
+         "exclude": ["Intern"]},
+    ]})
+    assert s.custom_tracks
+    assert [t.id for t in s.tracks] == ["engineering_leadership", "senior_ic"]
+    assert s.tracks[1].manages_people is False
+    assert s.tracks[1].exclude == ("Intern",)
+
+
+def test_track_validation_errors():
+    with pytest.raises(ValueError, match="non-empty name"):
+        settings.parse({"tracks": [{"titles": ["PM"]}]})
+    with pytest.raises(ValueError, match="at least one title"):
+        settings.parse({"tracks": [{"name": "PM", "titles": []}]})
+    with pytest.raises(ValueError, match="duplicate"):
+        settings.parse({"tracks": [
+            {"name": "Product", "titles": ["PM"]}, {"name": "product", "titles": ["Pm"]}]})
+    with pytest.raises(ValueError, match="reserved"):
+        settings.parse({"tracks": [{"name": "Reject", "titles": ["x"]}]})
+
+
+def test_tracks_fingerprint_changes_with_titles():
+    a = settings.parse({"tracks": [{"name": "PM", "titles": ["Senior PM"]}]})
+    b = settings.parse({"tracks": [{"name": "PM", "titles": ["Staff PM"]}]})
+    assert a.tracks_fingerprint != b.tracks_fingerprint
+    assert a.tracks_fingerprint == settings.parse(
+        {"tracks": [{"name": "PM", "titles": ["Senior PM"]}]}).tracks_fingerprint

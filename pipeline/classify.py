@@ -5,8 +5,9 @@ strings get one identical verdict forever and re-runs are free:
 
   - position verdicts  -> data/cache/position-verdicts.json
       {seniority, function, is_recruiter}
-  - title verdicts     -> data/cache/title-verdicts.json   (Stage 4)
-      {bucket: "leadership"|"ic"|"reject"}
+  - title verdicts     -> data/cache/title-verdicts.json   (Stage 4; custom tracks get
+      title-verdicts-<tracks fingerprint>.json)
+      {bucket: <track id>|"reject"}
 
 Flow: dedupe strings -> regex the unambiguous extremes (free) -> LLM the middle
 (strict json_schema, concurrency 8) -> cache every verdict.
@@ -17,6 +18,7 @@ import json
 import re
 from pathlib import Path
 
+from pipeline import settings
 from pipeline.common import CACHE, llm_json_many, log, run
 
 POSITION_CACHE = CACHE / "position-verdicts.json"
@@ -194,9 +196,10 @@ def classify_positions(positions: list[str]) -> dict[str, dict]:
 
 
 # ----------------------------------------------------------------------------------
-# TITLE classification for job postings (Stage 4) -> leadership | ic | reject
+# TITLE classification for job postings (Stage 4) -> track ids | reject
 # ----------------------------------------------------------------------------------
-# --- decisive regexes (the target is narrow, so aggressive regex matching is intended) ---
+# --- decisive regexes (the target is narrow, so aggressive regex matching is intended;
+# --- used only for the default tracks — custom tracks send every title to the LLM) ---
 
 # leadership: Engineering Manager and above, engineering org only
 _ENG_CTX = (r"(software|software\s+engineering|engineering|eng|platform\s+engineering|"
@@ -317,42 +320,87 @@ _TITLE_SYS = (
 )
 
 
+def _title_cache_path() -> Path:
+    """Title verdicts depend on the configured tracks, so custom tracks get a
+    fingerprinted cache file. Default tracks keep the legacy name."""
+    s = settings.load()
+    if not s.custom_tracks:
+        return TITLE_CACHE
+    return CACHE / f"title-verdicts-{s.tracks_fingerprint}.json"
+
+
+def _custom_title_sys() -> str:
+    s = settings.load()
+    lines = [
+        "You bucket a job posting TITLE for a candidate with the following target tracks. "
+        "Classify on the role, not the team/product suffix.",
+    ]
+    for t in s.tracks:
+        lines.append(f"- {t.id} ({t.name}): titles like {', '.join(t.titles)}."
+                     + (f" NOT when the title involves {', '.join(t.exclude)}."
+                        if t.exclude else ""))
+    lines.append(
+        "Pick the single best track id when the posting's role is the same role as (or a "
+        "close equivalent of) one of that track's titles at the same level; otherwise "
+        "return reject. Respect the exclusions above.")
+    return "\n".join(lines)
+
+
+def _custom_title_schema() -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "bucket": {"type": "string",
+                       "enum": [t.id for t in settings.load().tracks] + ["reject"]},
+            "reason": {"type": "string"},
+        },
+        "required": ["bucket", "reason"],
+        "additionalProperties": False,
+    }
+
+
 def classify_titles(titles: list[str]) -> dict[str, dict]:
     """titles -> {title: {bucket, reason, via}}. Cached on disk keyed by exact title."""
-    cache = _load(TITLE_CACHE)
+    cache_path = _title_cache_path()
+    cache = _load(cache_path)
     distinct = sorted({(t or "").strip() for t in titles if (t or "").strip()})
+    custom = settings.load().custom_tracks
     todo: list[str] = []
     for t in distinct:
         if t in cache:
             continue
-        core = _title_core(t)
-        low = core.lower()
-        if _TITLE_LEADER_RE.search(core):
-            cache[t] = {"bucket": "leadership", "reason": f"regex: leadership title ({core!r})",
-                        "_via": "regex"}
-        elif not _TECH_SIGNAL_RE.search(core):
-            cache[t] = {"bucket": "reject",
-                        "reason": f"regex: no technical signal in title ({core!r})",
-                        "_via": "regex"}
-        elif _TITLE_OBVIOUS_REJECT_RE.search(low):
-            cache[t] = {"bucket": "reject", "reason": f"regex: non-target role ({core!r})",
-                        "_via": "regex"}
-        elif (_TITLE_IC_RE.search(core) or _TITLE_IC_PLAIN_RE.search(core)) \
-                and not _TITLE_IC_EXCLUDE_RE.search(low):
-            cache[t] = {"bucket": "ic", "reason": f"regex: senior/staff software engineer ({core!r})",
-                        "_via": "regex"}
-        elif _TITLE_IC_EXCLUDE_RE.search(low) and not _TITLE_LEADER_RE.search(core) \
-                and re.search(r"\b(engineer|developer|architect)\b", low):
-            cache[t] = {"bucket": "reject",
-                        "reason": f"regex: IC above Staff / lead / non-SWE ({core!r})",
-                        "_via": "regex"}
-        elif re.search(r"\b(engineer|developer|programmer|swe)\b", low) and not re.search(
-                r"\b(senior|sr|staff|principal|lead|manager|director|head|vp|chief|"
-                r"president)\b", low):
-            # a plain / mid / numbered IC engineer title — below Senior, out of scope
-            cache[t] = {"bucket": "reject",
-                        "reason": f"regex: IC below Senior ({core!r})", "_via": "regex"}
+        if not custom:
+            core = _title_core(t)
+            low = core.lower()
+            if _TITLE_LEADER_RE.search(core):
+                cache[t] = {"bucket": "leadership", "reason": f"regex: leadership title ({core!r})",
+                            "_via": "regex"}
+            elif not _TECH_SIGNAL_RE.search(core):
+                cache[t] = {"bucket": "reject",
+                            "reason": f"regex: no technical signal in title ({core!r})",
+                            "_via": "regex"}
+            elif _TITLE_OBVIOUS_REJECT_RE.search(low):
+                cache[t] = {"bucket": "reject", "reason": f"regex: non-target role ({core!r})",
+                            "_via": "regex"}
+            elif (_TITLE_IC_RE.search(core) or _TITLE_IC_PLAIN_RE.search(core)) \
+                    and not _TITLE_IC_EXCLUDE_RE.search(low):
+                cache[t] = {"bucket": "ic", "reason": f"regex: senior/staff software engineer ({core!r})",
+                            "_via": "regex"}
+            elif _TITLE_IC_EXCLUDE_RE.search(low) and not _TITLE_LEADER_RE.search(core) \
+                    and re.search(r"\b(engineer|developer|architect)\b", low):
+                cache[t] = {"bucket": "reject",
+                            "reason": f"regex: IC above Staff / lead / non-SWE ({core!r})",
+                            "_via": "regex"}
+            elif re.search(r"\b(engineer|developer|programmer|swe)\b", low) and not re.search(
+                    r"\b(senior|sr|staff|principal|lead|manager|director|head|vp|chief|"
+                    r"president)\b", low):
+                # a plain / mid / numbered IC engineer title — below Senior, out of scope
+                cache[t] = {"bucket": "reject",
+                            "reason": f"regex: IC below Senior ({core!r})", "_via": "regex"}
+            else:
+                todo.append(t)
         else:
+            # custom tracks: no engineering-specific regexes, every title -> LLM
             todo.append(t)
 
     log(f"classify_titles: {len(distinct)} distinct, {len(distinct) - len(todo)} via "
@@ -360,13 +408,17 @@ def classify_titles(titles: list[str]) -> dict[str, dict]:
 
     if todo:
         items = [(t, f"Job posting title: {t!r}") for t in todo]
-        results = run(llm_json_many(items, _TITLE_SCHEMA, schema_name="title",
-                                    system=_TITLE_SYS, max_tokens=120))
+        if custom:
+            schema, system = _custom_title_schema(), _custom_title_sys()
+        else:
+            schema, system = _TITLE_SCHEMA, _TITLE_SYS
+        results = run(llm_json_many(items, schema, schema_name="title",
+                                    system=system, max_tokens=120))
         for t, parsed in results:
             if "_llm_error" in parsed:
                 cache[t] = {"bucket": "reject", "reason": "llm_error -> conservative reject",
                             "_via": "llm_error"}
             else:
                 cache[t] = {**parsed, "_via": "llm"}
-    _save(TITLE_CACHE, cache)
+    _save(cache_path, cache)
     return {t: cache[t] for t in distinct}

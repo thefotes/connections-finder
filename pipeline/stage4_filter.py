@@ -5,7 +5,8 @@ data/03-jobs-raw.jsonl -> data/04-jobs-eligible.jsonl
                        -> data/rejects-location.jsonl
                        -> data/04-location-review.jsonl   (ambiguous ACCEPTS, for tuning)
 
-Title filter: leadership | ic | reject  (hybrid regex+LLM, cached — pipeline/classify.py)
+Title filter: one of your tracks (settings.yaml) | reject  (hybrid regex+LLM, cached —
+pipeline/classify.py)
 Location filter: tier_1 (Remote US) | tier_2 (onsite/hybrid in your metro, settings.yaml)
                  | reject
 Both filters log every drop with a reason.
@@ -184,11 +185,13 @@ def main() -> None:
     write_jsonl(DATA / "rejects-location.jsonl", rej_loc)
     write_jsonl(DATA / "04-location-review.jsonl", loc_review)
 
-    n_lead = sum(1 for r in eligible if r["title_bucket"] == "leadership")
-    n_ic = sum(1 for r in eligible if r["title_bucket"] == "ic")
+    by_track = {}
+    for r in eligible:
+        by_track[r["title_bucket"]] = by_track.get(r["title_bucket"], 0) + 1
     t1 = sum(1 for r in eligible if r["location_tier"] == "tier_1")
     t2 = sum(1 for r in eligible if r["location_tier"] == "tier_2")
-    log(f"Stage 4: eligible={len(eligible)} (leadership={n_lead} ic={n_ic}; "
+    tracks_str = " ".join(f"{tid}={n}" for tid, n in sorted(by_track.items()))
+    log(f"Stage 4: eligible={len(eligible)} ({tracks_str}; "
         f"tier_1={t1} tier_2={t2}); rejects: title={len(rej_title)} location={len(rej_loc)}; "
         f"ambiguous-accepts logged={len(loc_review)}")
 

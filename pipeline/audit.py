@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from pipeline import settings
 from pipeline.common import DATA, ROOT, read_jsonl
 
 CHECKS: list[tuple[str, bool, str]] = []
@@ -95,8 +96,9 @@ def main() -> int:  # noqa: C901
 
     print("== invariant: title buckets & location tiers valid ==")
     elig = read_jsonl(DATA / "04-jobs-eligible.jsonl")
-    check("04 title_bucket in {leadership,ic}",
-          all(r.get("title_bucket") in ("leadership", "ic") for r in elig), "")
+    track_ids = {t.id for t in settings.load().tracks}
+    check("04 title_bucket in configured track ids",
+          all(r.get("title_bucket") in track_ids for r in elig), "")
     check("04 location_tier in {tier_1,tier_2}",
           all(r.get("location_tier") in ("tier_1", "tier_2") for r in elig), "")
 
@@ -154,17 +156,18 @@ def main() -> int:  # noqa: C901
             embedded = None
             detail = f"embedded JSON parse error: {e}"
         ok_html = bool(embedded and embedded.get("roles") is not None
-                       and embedded.get("recruiters") is not None)
+                       and embedded.get("recruiters") is not None
+                       and embedded.get("tracks") is not None)
         if embedded:
             detail = (f"{len(embedded['roles'])} roles, {len(embedded['recruiters'])} recruiters "
-                      f"embedded; tabs: leadership/ic/recruiters; "
+                      f"embedded; tabs: {len(embedded.get('tracks', []))} tracks + recruiters; "
                       f"no external src/href to CDN: "
                       f"{'OK' if 'http' not in re.sub(r'https?://[^\"]*(target|rel|noopener)', '', html).split('DATA')[0] or True else 'check'}")
         # self-contained: no <link rel=stylesheet> or external <script src=>
         ext = re.findall(r'<(?:script|link)[^>]+(?:src|href)="https?://[^"]+"', html)
         check("report.html has no external script/style dependency", not ext,
               f"{len(ext)} external refs" if ext else "fully self-contained")
-    check("report.html exists with valid embedded JSON (3 tabs)", ok_html, detail)
+    check("report.html exists with valid embedded JSON (tracks + recruiters)", ok_html, detail)
 
     # headless smoke test: run the page's own script against a DOM stub, all 3 tabs
     smoke_js = Path(__file__).parent / "smoke_report.js"

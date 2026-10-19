@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 
 import config
+from pipeline import settings
 from pipeline.common import (
     DATA, ROOT, llm_healthcheck, llm_json_many, log, read_jsonl, run, write_jsonl,
 )
@@ -48,8 +49,9 @@ SYS = (
     "- comp_signal: per the rubric's compensation target — a published band topping out "
     "under the target => low (0-3); clears it => higher, scaled; no band published => "
     "neutral (5).\n"
-    "- manages_managers: true only if the role manages other managers / owns a multi-team "
-    "org. A leadership-track role that manages no one is mis-classified — say so in "
+    "- manages_managers: for a people-management track, true only if the role manages "
+    "other managers / owns a multi-team org; for any other track always false. A "
+    "people-management-track role that manages no one is mis-classified — say so in "
     "concerns and score scope_match low.\n"
     "- industry_flag: set a short lowercase tag (e.g. \"defense\", \"gambling\", "
     "\"crypto\", \"surveillance\") ONLY if the company/role plausibly falls in a category "
@@ -59,14 +61,25 @@ SYS = (
 )
 
 
+def _track_for(bucket: str | None) -> settings.Track | None:
+    tid = bucket or ""
+    return next((t for t in settings.load().tracks if t.id == tid), None)
+
+
 def build_prompt(profile_md: str, job: dict) -> str:
     desc = (job.get("description_text") or "")[:6000]
+    track = _track_for(job.get("title_bucket"))
+    track_line = (f"{track.name} — titles: {', '.join(track.titles)}" if track
+                  else str(job.get("title_bucket")))
+    manages = (f"yes (a people-management track)" if track and track.manages_people
+               else "no")
     return (
         f"=== CANDIDATE PROFILE & RUBRIC (profile.md) ===\n{profile_md}\n\n"
         f"=== JOB POSTING ===\n"
         f"Company: {job['company']}\n"
         f"Title: {job['title']}\n"
-        f"Title bucket (pre-classified): {job.get('title_bucket')}\n"
+        f"Target track (pre-classified): {track_line}\n"
+        f"People-management track: {manages}\n"
         f"Location (raw): {job.get('location_raw')}\n"
         f"Location tier (pre-classified): {job.get('location_tier')} "
         f"({job.get('location_reason')})\n"

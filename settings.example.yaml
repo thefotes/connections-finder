@@ -41,3 +41,18 @@ location:
     - brooklyn
     - jersey city
     - hoboken
+
+# Target roles (tracks). The stage 4 title filter keeps only postings whose role matches
+# one of these tracks. Omit this whole section to get the built-in software-engineering
+# tracks (Engineering leadership + Senior/Staff software engineering), which use a fast
+# regex path. With custom tracks every distinct title is sent to the LLM once (cached).
+# `id` is the slug of `name`; ids `reject` and `recruiters` are reserved.
+# tracks:
+#   - name: Product management
+#     titles: [Senior Product Manager, Staff Product Manager, Group Product Manager,
+#              Director of Product, Head of Product]
+#     exclude: [Intern, Associate]
+#     manages_people: false
+#   - name: Engineering leadership
+#     titles: [Engineering Manager, Director of Engineering, VP Engineering]
+#     manages_people: true
