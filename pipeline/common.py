@@ -344,20 +344,42 @@ def run(coro):
     return asyncio.run(coro)
 
 
+_HEALTH_SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean"}},
+                  "required": ["ok"], "additionalProperties": False}
+
+
 def llm_healthcheck(timeout: float = 30.0) -> tuple[bool, str]:
-    """One tiny call to the LLM endpoint. Returns (ok, detail)."""
+    """One tiny call to the LLM endpoint using the SAME strict json_schema shape the
+    pipeline uses, so a model that cannot do structured outputs fails at setup with a
+    clear message instead of mid-pipeline. Not cached. Returns (ok, detail)."""
+    model = config.LLM_MODEL
     try:
         with OpenAI(timeout=timeout, max_retries=0) as client:
             resp = client.chat.completions.create(
-                model=config.LLM_MODEL,
-                messages=[{"role": "user", "content": "Reply with exactly: OK"}],
+                model=model,
+                messages=[{"role": "user", "content": "Return ok=true."}],
                 temperature=0,
-                max_completion_tokens=8,
+                max_completion_tokens=32,
+                response_format={"type": "json_schema",
+                                 "json_schema": {"name": "healthcheck", "strict": True,
+                                                 "schema": _HEALTH_SCHEMA}},
                 extra_body=NO_THINKING,
             )
-        return True, (resp.choices[0].message.content or "").strip()
+        content = (resp.choices[0].message.content or "").strip()
+        try:
+            parsed = json.loads(content)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict) and parsed.get("ok") is True:
+            return True, f"strict JSON OK ({model})"
+        got = content[:80] or "(empty)"
+        return False, (f"model {model} did not return valid strict JSON (got: {got}); "
+                       "choose a model that supports structured outputs")
     except Exception as e:  # noqa: BLE001
-        return False, f"{type(e).__name__}: {e}"
+        detail = f"{type(e).__name__}: {e}"
+        if "response_format" in str(e) or "json_schema" in str(e):
+            detail += "; this model/endpoint may not support strict JSON-schema output"
+        return False, detail
 
 
 # ------------------------------------------------------------------------------------

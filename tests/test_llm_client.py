@@ -127,9 +127,22 @@ def test_cache_hit_skips_network(stub):
 
 
 def test_healthcheck_ok(stub):
+    stub.replies.append((200, _completion('{"ok": true}')))
+    ok, detail = common.llm_healthcheck()
+    assert ok and detail == "strict JSON OK (local-general)"
+    body = stub.requests[0]["body"]
+    assert body["max_completion_tokens"] == 32
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert body["response_format"]["json_schema"]["schema"] == SCHEMA
+
+
+def test_healthcheck_non_json_content_hints_structured_outputs(stub):
     stub.replies.append((200, _completion("OK")))
-    assert common.llm_healthcheck() == (True, "OK")
-    assert stub.requests[0]["body"]["max_completion_tokens"] == 8
+    ok, detail = common.llm_healthcheck()
+    assert not ok
+    assert "did not return valid strict JSON" in detail
+    assert "structured outputs" in detail
+    assert "OK" in detail
 
 
 def test_healthcheck_bad_key_is_typed_and_secret_free(stub, monkeypatch):

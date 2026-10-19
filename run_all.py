@@ -9,8 +9,11 @@ Every stage is independently re-runnable and reads only the artifact before it.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import time
+
+from pipeline.common import llm_healthcheck
 
 STAGES = [
     ("0", "pipeline.stage0_parse"),
@@ -26,6 +29,17 @@ STAGES = [
 def main() -> int:
     lo = sys.argv[1] if len(sys.argv) > 1 else "0"
     hi = sys.argv[2] if len(sys.argv) > 2 else "6"
+    if os.environ.get("SKIP_LLM_CHECK") == "1":
+        print("LLM check: skipped (SKIP_LLM_CHECK=1)")
+    else:
+        ok, detail = llm_healthcheck()
+        if not ok:
+            print(f"LLM check failed: {detail}", file=sys.stderr)
+            print("Set OPENAI_BASE_URL / OPENAI_API_KEY / LLM_MODEL in .env "
+                  "(see README 'Choose an LLM'). Set SKIP_LLM_CHECK=1 to skip "
+                  "(fully cached re-runs).", file=sys.stderr)
+            return 3
+        print(f"LLM check: {detail}")
     for num, mod in STAGES:
         if not (lo <= num <= hi):
             continue

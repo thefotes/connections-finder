@@ -10,12 +10,8 @@ write, and ranks the result by role fit × how strong your connection there is. 
 is a single self-contained `report.html` and an optional local web app for tracking who
 you have reached out to.
 
-It is a single-user tool that runs on your own machine. The title filter keeps only
-postings whose role matches one of your **target-role tracks**, configured in
-`settings.yaml`; without a `tracks:` section you get the built-in software-engineering
-tracks (Engineering leadership and Senior/Staff software engineering), which use a fast
-regex path. Custom tracks send each distinct title to the LLM once (cached) instead. See
-[Customizing](#customizing).
+It is a single-user tool that runs on your own machine. See [Customizing](#customizing)
+for how to change what roles are kept.
 
 Pairs well with [job-matcher](https://github.com/thefotes/job-matcher), an MCP server that
 lets your AI agent evaluate and track postings; it can import `data/02-boards.jsonl`.
@@ -60,7 +56,31 @@ input/messages.csv     # optional; enables DM-volume and recency scoring
 - **`profile.md`**: who you are and what you want, in plain language. The LLM scores
   every eligible role against it.
 
-Check the LLM connection:
+### Choose an LLM
+
+The pipeline needs a model that supports **strict JSON-schema structured outputs** —
+every verdict is requested with `response_format: json_schema, strict: true`. `run_all.py`
+checks this up front and exits with a clear error if the model can't do it.
+
+Options, easiest first:
+
+1. **OpenRouter** — one key, many models, pay as you go:
+   ```bash
+   OPENAI_BASE_URL=https://openrouter.ai/api/v1
+   LLM_MODEL=openai/gpt-4.1-mini
+   ```
+2. **OpenAI** — `OPENAI_BASE_URL=https://api.openai.com/v1` and a `gpt-4.1-mini` class
+   model.
+3. **Local** — Ollama / LM Studio / vLLM with an OpenAI-compatible endpoint, e.g.
+   `OPENAI_BASE_URL=http://localhost:11434/v1` (set `OPENAI_API_KEY` to any
+   non-empty value; the model must still support structured outputs).
+
+Usage: a first run makes one short call per distinct job title (custom tracks) and one
+~3k-token call per eligible role — for a ~1,000-connection network expect a few million
+input tokens on a small model, then near-zero on re-runs because everything is cached.
+Check your provider's pricing.
+
+Check the LLM connection (this also verifies strict JSON output):
 
 ```bash
 uv run python -c "from pipeline.common import llm_healthcheck; print(llm_healthcheck())"
