@@ -71,3 +71,17 @@ def test_redact_pii_strips_identity_fields():
     c = out["roles"][0]["connections"][0]
     assert "name" not in c and "profile_url" not in c and "message_count" not in c
     assert c["connection_score"] == 9.0
+
+
+def test_render_report_neutralizes_script_breakout(tmp_path):
+    final = {"roles": [{"title": "</script><img src=x onerror=alert(1)>"}],
+             "recruiters": [], "tracks": [], "meta": {}, "stats": {}}
+    out = tmp_path / "report.html"
+    stage6_assemble.render_report(final, out)
+    html = out.read_text()
+    island = re.search(
+        r'<script id="data" type="application/json">(.*?)</script>', html, re.S).group(1)
+    assert "</script>" not in island
+    # the escape is JSON-safe: parses back to the original string
+    embedded = json.loads(island)
+    assert embedded["roles"][0]["title"] == "</script><img src=x onerror=alert(1)>"
