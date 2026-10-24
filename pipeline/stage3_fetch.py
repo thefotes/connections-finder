@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -169,7 +170,11 @@ def normalize_posting(board: dict, provider: str, job: dict) -> dict | None:
     # URLs come verbatim from ATS JSON and are rendered as links in report.html /
     # the board app. Only http(s) is safe there: e.g. a `javascript:` url executes
     # on click. Anything else is treated as no derivable URL and rejected.
-    if not rec["url"].startswith(("http://", "https://")):
+    try:
+        scheme = urlsplit(rec["url"]).scheme.lower()
+    except ValueError:  # e.g. malformed IPv6 host
+        return None
+    if scheme not in ("http", "https"):
         return None
     rec.update({
         "company": company, "company_normalized": cn, "ats": provider, "board_token": token,
