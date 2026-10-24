@@ -248,7 +248,10 @@ def main() -> None:
 
 
 def render_report(final: dict, path: Path) -> None:
-    payload = json.dumps(final, ensure_ascii=False, default=str)
+    # Remote-derived strings can contain "</script>". json.dumps() does not escape
+    # '<', so it would terminate the data island and inject raw HTML. Escaping '<'
+    # as \u003c is JSON-safe (unescaped identically by JSON.parse) and HTML-safe.
+    payload = json.dumps(final, ensure_ascii=False, default=str).replace("<", "\\u003c")
     html = _REPORT_TEMPLATE.replace("/*__DATA__*/", payload)
     path.write_text(html, encoding="utf-8")
 
