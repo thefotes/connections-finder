@@ -114,6 +114,40 @@ def log(msg: str) -> None:
 # ------------------------------------------------------------------------------------
 # HTTP with on-disk cache keyed by URL
 # ------------------------------------------------------------------------------------
+# Every outbound crawler request must land on an allow-listed ATS host — including
+# redirect hops. The single source of truth lives here so pipeline/audit.py and the
+# clients below enforce the same list.
+ATS_URL_ALLOW_RE = re.compile(
+    r"^https://("
+    r"boards-api\.greenhouse\.io|api\.ashbyhq\.com|api\.lever\.co|"
+    r"api\.smartrecruiters\.com|apply\.workable\.com|"
+    r"[a-z0-9-]+\.recruitee\.com|"
+    r"[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)/", re.I)
+
+_MAX_REDIRECTS = 5
+
+
+def _validate_redirect(current_url: str, location: str) -> str:
+    """Resolve a Location header against the current URL and require it to stay on
+    an allow-listed ATS host. Raises on anything else (client code caches the
+    failure like any other network error)."""
+    nxt = str(httpx.URL(current_url).join(location))
+    if not ATS_URL_ALLOW_RE.match(nxt):
+        raise ValueError(f"blocked redirect to non-allow-listed host: {nxt}")
+    return nxt
+
+
+async def _get_no_follow(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    """GET with manual redirects: every hop is re-validated against the allow-list."""
+    r = await client.get(url, follow_redirects=False)
+    for _ in range(_MAX_REDIRECTS):
+        if not r.is_redirect:
+            return r
+        url = _validate_redirect(url, r.headers.get("location", ""))
+        r = await client.get(url, follow_redirects=False)
+    raise ValueError(f"too many redirects fetching {url}")
+
+
 def _url_key(url: str) -> str:
     return hashlib.sha256(url.encode("utf-8")).hexdigest()
 
@@ -170,14 +204,14 @@ async def http_get_many(
 
     sem = asyncio.Semaphore(concurrency)
     async with httpx.AsyncClient(
-        timeout=config.HTTP_TIMEOUT, headers=hdrs, follow_redirects=True
+        timeout=config.HTTP_TIMEOUT, headers=hdrs, follow_redirects=False
     ) as client:
 
         async def one(u: str) -> None:
             async with sem:
                 for attempt in range(config.HTTP_RETRIES + 1):
                     try:
-                        r = await client.get(u)
+                        r = await _get_no_follow(client, u)
                         status, text = r.status_code, r.text
                         # retry transient server errors only; 429 is cached-and-skipped
                         # (bulk token probing; a rate-limited provider is dropped)
