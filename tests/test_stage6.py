@@ -54,3 +54,20 @@ def test_stage6_final_shape(tmp_path, monkeypatch):
         r'<script id="data" type="application/json">(.*?)</script>', html, re.S).group(1))
     assert embedded["tracks"][0]["id"] == "leadership"
     assert "data-tab" not in html.split("<script id=\"data\"")[0].split('id="tabs"')[1]
+
+
+def test_redact_pii_strips_identity_fields():
+    final = {"stats": {"recruiters_total": 2, "roles_total": 1},
+             "tracks": [],
+             "recruiters": [{"name": "A", "profile_url": "u"}],
+             "roles": [{"company": "ACME", "connection_count": 1,
+                        "connections": [{"name": "X", "profile_url": "u",
+                                         "message_count": 3, "connection_score": 9.0}],
+                        "best_connection": {"name": "X"}}]}
+    out = stage6_assemble.redact_pii(final)
+    assert out["recruiters"] == []
+    assert out["roles"][0]["best_connection"] is None
+    assert out["roles"][0]["connection_count"] == 1
+    c = out["roles"][0]["connections"][0]
+    assert "name" not in c and "profile_url" not in c and "message_count" not in c
+    assert c["connection_score"] == 9.0

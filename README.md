@@ -151,6 +151,9 @@ them to tune the filters.
 
 Your connections' names, profile URLs, emails and messages never leave your machine.
 
+- **`report.html` embeds every connection's name, profile URL, position and DM metadata.
+  It is a personal artifact — do not share or publish it as-is.** For a shareable
+  version, generate it redacted: `uv run python -m pipeline.stage6_assemble --redact`.
 - **HTTP** goes only to public ATS job-board APIs; the audit checks this.
 - **The LLM** sees job postings, company names, your connections' job titles (no names)
   and your `profile.md`. Use a local model if you would rather nothing leave your network.
