@@ -54,7 +54,10 @@ import time
 import httpx
 
 import config
-from pipeline.common import _store_http, cached_http_get, log, normalize_company
+from pipeline.common import (
+    _get_no_follow, _store_http, _validate_redirect, cached_http_get, log,
+    normalize_company,
+)
 
 # Only these wd{N} hosts resolve in DNS (measured 2026-09-10 over wd1..wd110). Ordered
 # most-populated-first so the common case short-circuits early.
@@ -182,7 +185,7 @@ async def _probe_get_many(urls: list[str], *, deadline: float | None = None) -> 
     sem = asyncio.Semaphore(conc)
     hdrs = {"User-Agent": config.USER_AGENT, "Accept": "text/plain, */*"}
     async with httpx.AsyncClient(
-        timeout=config.WORKDAY_PROBE_TIMEOUT, headers=hdrs, follow_redirects=True,
+        timeout=config.WORKDAY_PROBE_TIMEOUT, headers=hdrs, follow_redirects=False,
         limits=httpx.Limits(max_connections=conc + 20, max_keepalive_connections=conc),
     ) as client:
 
@@ -192,7 +195,7 @@ async def _probe_get_many(urls: list[str], *, deadline: float | None = None) -> 
                     return
                 for attempt in range(2):
                     try:
-                        r = await client.get(u)
+                        r = await _get_no_follow(client, u)
                         if r.status_code == 429 and attempt == 0:
                             await asyncio.sleep(config.HTTP_BACKOFF_BASE)
                             continue
@@ -292,13 +295,18 @@ async def post_many(reqs: list[tuple[str, dict]], *, concurrency: int | None = N
 
     sem = asyncio.Semaphore(concurrency)
     async with httpx.AsyncClient(timeout=config.HTTP_TIMEOUT, headers=hdrs,
-                                 follow_redirects=True) as client:
+                                 follow_redirects=False) as client:
 
         async def one(key: str, url: str, body: dict) -> None:
             async with sem:
                 for attempt in range(config.HTTP_RETRIES + 1):
                     try:
-                        r = await client.post(url, json=body)
+                        r = await client.post(url, json=body, follow_redirects=False)
+                        for _ in range(5):
+                            if not r.is_redirect:
+                                break
+                            url = _validate_redirect(url, r.headers.get("location", ""))
+                            r = await client.post(url, json=body, follow_redirects=False)
                         if r.status_code in (429, 500, 502, 503, 504) and attempt < config.HTTP_RETRIES:
                             await asyncio.sleep(config.HTTP_BACKOFF_BASE * (2 ** attempt))
                             continue
