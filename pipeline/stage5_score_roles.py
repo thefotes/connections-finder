@@ -101,6 +101,24 @@ def build_prompt(profile_md: str, job: dict) -> str:
     )
 
 
+def _ngrams(text: str, n: int = 8) -> set[str]:
+    words = re.sub(r"[^a-z0-9 ]", " ", (text or "").lower()).split()
+    return {" ".join(words[i:i + n]) for i in range(max(0, len(words) - n + 1))}
+
+
+def _scrub_profile_leak(text: str, profile_ngrams: set[str]) -> str:
+    """Last line of defense against prompt injection exfiltration: a hostile posting
+    can instruct the model to quote the CANDIDATE PROFILE section into rationale/
+    concerns, which are rendered into the shareable report. If the output contains
+    a verbatim 8-word run from profile.md, drop the whole field."""
+    t = text or ""
+    if not t or not profile_ngrams:
+        return t
+    if _ngrams(t) & profile_ngrams:
+        return "[redacted: field contained candidate-profile text]"
+    return t
+
+
 def composite(parsed: dict) -> float:
     return round(sum(config.ROLE_WEIGHTS[k] * float(parsed.get(k, 0) or 0)
                      for k in config.ROLE_WEIGHTS), 3)
@@ -140,6 +158,7 @@ def main() -> None:
                                 max_tokens=1400,
                                 concurrency=config.LLM_CONCURRENCY_HEAVY))
     by_url = dict(results)
+    profile_ngrams = _ngrams(profile_md)
 
     out = []
     errors = 0
@@ -152,6 +171,8 @@ def main() -> None:
                  "comp_min": None, "comp_max": None, "industry_flag": None,
                  "rationale": "LLM scoring failed", "concerns": "not scored"}
         comp_pen = bool(p.get("comp_max") and p["comp_max"] < 200_000)
+        p["rationale"] = _scrub_profile_leak(p.get("rationale", ""), profile_ngrams)
+        p["concerns"] = _scrub_profile_leak(p.get("concerns", ""), profile_ngrams)
         role_composite = composite(p)
         role_score = p["overall_score"] if config.ROLE_USE_LLM_OVERALL else role_composite
         out.append({
