@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from pipeline import settings
-from pipeline.common import DATA, ROOT, read_jsonl
+from pipeline.common import ATS_URL_ALLOW_RE, DATA, ROOT, read_jsonl
 
 CHECKS: list[tuple[str, bool, str]] = []
 
@@ -108,11 +108,7 @@ def main() -> int:  # noqa: C901
     # A Workday URL carries a company-name-derived tenant guess
     # and nothing else — no connection name, URL or DM content ever reaches it, which is
     # what this check exists to prove.
-    allow = re.compile(r"^https://("
-                       r"boards-api\.greenhouse\.io|api\.ashbyhq\.com|api\.lever\.co|"
-                       r"api\.smartrecruiters\.com|apply\.workable\.com|"
-                       r"[a-z0-9-]+\.recruitee\.com|"
-                       r"[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)/", re.I)
+    allow = ATS_URL_ALLOW_RE
     for m in http_meta:
         try:
             u = json.loads(m.read_text())["url"]
