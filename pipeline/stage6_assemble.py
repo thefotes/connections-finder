@@ -13,6 +13,7 @@ import datetime as dt
 import json
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
 import config
@@ -92,6 +93,7 @@ def apply_outreach(fs: float, company_norm: str, role_url: str,
 
 
 def main() -> None:
+    redacted = "--redact" in sys.argv[1:]
     roles = read_jsonl(DATA / "05-jobs-scored.jsonl")
     conns = read_jsonl(DATA / "01-connections-scored.jsonl")
     recruiters = read_jsonl(DATA / "01-recruiters.jsonl")
@@ -238,13 +240,38 @@ def main() -> None:
         "roles": out_roles,
         "recruiters": rec_view,
     }
+    if redacted:
+        final = redact_pii(final)
+        final["meta"]["redacted"] = True
     write_json(DATA / "06-final.json", final)
     by_track_str = " ".join(f"{tid}={n}" for tid, n in stats["by_track"].items())
     log(f"Stage 6: wrote data/06-final.json (roles={stats['roles_total']} "
-        f"{by_track_str} recruiters={stats['recruiters_total']})")
+        f"{by_track_str} recruiters={stats['recruiters_total']}"
+        f"{' [REDACTED]' if redacted else ''})")
 
     render_report(final, ROOT / "report.html")
-    log("Stage 6: wrote report.html")
+    log("Stage 6: wrote report.html" + (" (redacted)" if redacted else ""))
+
+
+_REDACT_CONN_KEYS = ("name", "profile_url", "position", "message_count",
+                     "last_message_date", "why_ranked")
+
+
+def redact_pii(final: dict) -> dict:
+    """Drop identity/DM metadata so report.html can be shared without disclosing
+    the operator's 1st-degree network. Scores, buckets and counts are kept."""
+    def rc(c: dict) -> dict:
+        return {k: v for k, v in c.items() if k not in _REDACT_CONN_KEYS}
+
+    out = {**final, "recruiters": []}
+    out["stats"] = {**final["stats"], "recruiters_total": 0}
+    out["roles"] = [{
+        **r,
+        "connections": [rc(c) for c in r.get("connections", [])],
+        "best_connection": None,
+        "connection_count": len(r.get("connections", [])),
+    } for r in final.get("roles", [])]
+    return out
 
 
 def render_report(final: dict, path: Path) -> None:
