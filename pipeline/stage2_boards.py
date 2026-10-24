@@ -151,6 +151,20 @@ VERIFY_SYS = (
 )
 
 
+def verdict_accepts(v: dict, board: dict) -> bool:
+    """Low-trust providers (claimable subdomains / deterministic tokens) offer only
+    board-supplied evidence: a squatted {token}.recruitee.com can fabricate a display
+    name and plausible titles and win a medium LLM verdict. Auto-discovered boards on
+    those providers must clear the bar at HIGH confidence. Boards the operator listed
+    in manual-boards.yaml are trusted input and keep the medium bar."""
+    if not v.get("match"):
+        return False
+    if v.get("confidence") == "high":
+        return True
+    return v.get("confidence") == "medium" and (
+        board["ats"] not in LOW_TRUST_PROVIDERS or board.get("source") == "manual")
+
+
 def needs_verification(company_norm: str, token: str, board_name: str | None,
                        ats: str = "") -> tuple[bool, str]:
     words = company_norm.split()
@@ -488,7 +502,7 @@ def main() -> None:  # noqa: C901 — linear pipeline, readability over decompos
             rec = {**candidates[nc], "verification": {
                 "method": "llm", "match": bool(v.get("match")),
                 "confidence": v.get("confidence"), "reason": v.get("reason", "")}}
-            if bool(v.get("match")) and v.get("confidence") in ("high", "medium"):
+            if verdict_accepts(v, candidates[nc]):
                 ok_out[nc] = rec
             else:
                 bad_out[nc] = rec
