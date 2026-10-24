@@ -338,7 +338,13 @@ def parse_jobs_page(body: str) -> tuple[list[dict], int]:
         return [], 0
     if not isinstance(payload, dict) or not isinstance(payload.get("jobPostings"), list):
         return [], 0
-    return payload["jobPostings"], int(payload.get("total") or 0)
+    # `total` comes from the remote tenant; a malformed value ("1,200", a dict, …)
+    # must degrade to 0, not crash the stage-3 run.
+    try:
+        total = int(payload.get("total") or 0)
+    except (TypeError, ValueError):
+        total = 0
+    return payload["jobPostings"], total
 
 
 async def probe_site(tenant: str, shard: str, site: str) -> tuple[list[dict], int]:
