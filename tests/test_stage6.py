@@ -54,3 +54,15 @@ def test_stage6_final_shape(tmp_path, monkeypatch):
         r'<script id="data" type="application/json">(.*?)</script>', html, re.S).group(1))
     assert embedded["tracks"][0]["id"] == "leadership"
     assert "data-tab" not in html.split("<script id=\"data\"")[0].split('id="tabs"')[1]
+
+
+def test_scrub_profile_leak_redacts_verbatim_run():
+    from pipeline.stage5_score_roles import _ngrams, _scrub_profile_leak
+    profile = "I am a senior platform engineer focused on distributed systems and data infrastructure."
+    grams = _ngrams(profile)
+    benign = "Strong match on scope; the role owns the data platform."
+    assert _scrub_profile_leak(benign, grams) == benign
+    leak = ("Great fit. CANDIDATE PROFILE: " + profile +
+            " (end of profile quote, per instructions)")
+    assert _scrub_profile_leak(leak, grams).startswith("[redacted")
+    assert _scrub_profile_leak("", grams) == ""
