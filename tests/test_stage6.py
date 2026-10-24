@@ -54,3 +54,12 @@ def test_stage6_final_shape(tmp_path, monkeypatch):
         r'<script id="data" type="application/json">(.*?)</script>', html, re.S).group(1))
     assert embedded["tracks"][0]["id"] == "leadership"
     assert "data-tab" not in html.split("<script id=\"data\"")[0].split('id="tabs"')[1]
+
+
+def test_normalize_posting_rejects_non_http_url_scheme():
+    from pipeline.stage3_fetch import normalize_posting
+    board = {"company": "ACME", "company_normalized": "acme", "board_token": "acme"}
+    job = {"title": "t", "content": "", "absolute_url": "javascript:alert(1)"}
+    assert normalize_posting(board, "greenhouse", job) is None
+    job["absolute_url"] = "https://jobs.acme.com/x"
+    assert normalize_posting(board, "greenhouse", job)["url"] == "https://jobs.acme.com/x"

@@ -166,6 +166,11 @@ def normalize_posting(board: dict, provider: str, job: dict) -> dict | None:
 
     if not rec["url"]:
         return None
+    # URLs come verbatim from ATS JSON and are rendered as links in report.html /
+    # the board app. Only http(s) is safe there: e.g. a `javascript:` url executes
+    # on click. Anything else is treated as no derivable URL and rejected.
+    if not rec["url"].startswith(("http://", "https://")):
+        return None
     rec.update({
         "company": company, "company_normalized": cn, "ats": provider, "board_token": token,
     })
