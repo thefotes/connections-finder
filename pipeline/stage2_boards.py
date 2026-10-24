@@ -488,7 +488,16 @@ def main() -> None:  # noqa: C901 — linear pipeline, readability over decompos
             rec = {**candidates[nc], "verification": {
                 "method": "llm", "match": bool(v.get("match")),
                 "confidence": v.get("confidence"), "reason": v.get("reason", "")}}
-            if bool(v.get("match")) and v.get("confidence") in ("high", "medium"):
+            # Low-trust providers (claimable subdomains / deterministic tokens) are
+            # board-supplied evidence only: a squatted {token}.recruitee.com can
+            # fabricate a display name and plausible titles and win a medium LLM
+            # verdict. They must clear the bar at HIGH confidence; anything less is
+            # treated as a rejection.
+            if bool(v.get("match")) and (
+                v.get("confidence") == "high"
+                or (v.get("confidence") == "medium"
+                    and candidates[nc]["ats"] not in LOW_TRUST_PROVIDERS)
+            ):
                 ok_out[nc] = rec
             else:
                 bad_out[nc] = rec
