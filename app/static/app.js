@@ -142,6 +142,8 @@ function render(){
     const det = document.createElement('tr');
     det.className='detail'; det.style.display='none';
     det.innerHTML = `<td colspan="8">${detailHtml(r)}</td>`;
+    const ob = det.querySelector('[data-role-url]');
+    if (ob) ob.onclick = e => { e.stopPropagation(); openOutreach(ob.dataset.roleUrl); };
     tr.onclick = e => { if(e.target.tagName==='A'||e.target.tagName==='BUTTON') return;
       det.style.display = det.style.display==='none'?'':'none'; };
     body.appendChild(tr); body.appendChild(det);
@@ -171,7 +173,7 @@ function detailHtml(r){
    <table class="conns"><tbody>${conns||'<tr><td class=muted>none</td></tr>'}</tbody></table>
    <h4>Description excerpt</h4><div class="muted">${esc(r.description_excerpt||'')}</div>
    ${statusButtons(r)}
-   <p><button class="btn primary" onclick='openOutreach(${JSON.stringify(r.url)});event.stopPropagation();'>
+   <p><button class="btn primary" data-role-url="${esc(r.url)}">
      ${isContacted(r)?'edit outreach':'log outreach'}</button>
    &nbsp;<a href="${esc(r.url)}" target="_blank" rel="noopener">open listing ↗</a></p>`;
 }
@@ -205,8 +207,10 @@ function renderRecruiters(head, body){
       <div>First / last DM</div><div class="muted">${esc(r.first_message_date||'—')} → ${esc(r.last_message_date||'—')}</div>
       <div>Connection score</div><div>${r.connection_score}</div>
      </div>
-     <p><button class="btn primary" onclick='toggleRecruiter(${JSON.stringify(r.profile_url)},${JSON.stringify(r.name)});event.stopPropagation();'>
-      ${r.outreach_status?'✓ contacted — undo':'mark as contacted'}</button></p></td>`;
+     <p><button class="btn primary" data-recruiter-url="${esc(r.profile_url)}" data-recruiter-name="${esc(r.name)}">
+       ${r.outreach_status?'✓ contacted — undo':'mark as contacted'}</button></p></td>`;
+    const rb = det.querySelector('[data-recruiter-url]');
+    if (rb) rb.onclick = e => { e.stopPropagation(); toggleRecruiter(rb.dataset.recruiterUrl, rb.dataset.recruiterName); };
     tr.onclick=e=>{if(e.target.tagName==='A')return;det.style.display=det.style.display==='none'?'':'none';};
     body.appendChild(tr); body.appendChild(det);
   });

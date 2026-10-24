@@ -8,6 +8,7 @@ stage — no code change, no re-crawl. Every verdict is cached on disk by payloa
 """
 from __future__ import annotations
 
+import re
 import sys
 
 import config
@@ -74,7 +75,8 @@ def _track_for(bucket: str | None) -> settings.Track | None:
 
 
 def build_prompt(profile_md: str, job: dict) -> str:
-    desc = (job.get("description_text") or "")[:6000]
+    # Strip fence-like runs so a posting can't close the JOB POSTING block early.
+    desc = re.sub(r"<{4,}|>{4,}", "", (job.get("description_text") or "")[:6000])
     track = _track_for(job.get("title_bucket"))
     track_line = (f"{track.name} — titles: {', '.join(track.titles)}" if track
                   else str(job.get("title_bucket")))
