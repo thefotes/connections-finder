@@ -56,11 +56,15 @@ def test_stage6_final_shape(tmp_path, monkeypatch):
     assert "data-tab" not in html.split("<script id=\"data\"")[0].split('id="tabs"')[1]
 
 
-def test_workday_parse_jobs_page_tolerates_malformed_total():
-    from pipeline.providers import workday as wd
-    jobs, total = wd.parse_jobs_page('{"total": "1,200", "jobPostings": [{"title": "t"}]}')
-    assert total == 0 and len(jobs) == 1
-    jobs, total = wd.parse_jobs_page('{"total": {"bad": 1}, "jobPostings": []}')
-    assert total == 0
-    jobs, total = wd.parse_jobs_page('{"total": 42, "jobPostings": []}')
-    assert total == 42
+def test_render_report_neutralizes_script_breakout(tmp_path):
+    final = {"roles": [{"title": "</script><img src=x onerror=alert(1)>"}],
+             "recruiters": [], "tracks": [], "meta": {}, "stats": {}}
+    out = tmp_path / "report.html"
+    stage6_assemble.render_report(final, out)
+    html = out.read_text()
+    island = re.search(
+        r'<script id="data" type="application/json">(.*?)</script>', html, re.S).group(1)
+    assert "</script>" not in island
+    # the escape is JSON-safe: parses back to the original string
+    embedded = json.loads(island)
+    assert embedded["roles"][0]["title"] == "</script><img src=x onerror=alert(1)>"

@@ -248,7 +248,10 @@ def main() -> None:
 
 
 def render_report(final: dict, path: Path) -> None:
-    payload = json.dumps(final, ensure_ascii=False, default=str)
+    # Remote-derived strings can contain "</script>". json.dumps() does not escape
+    # '<', so it would terminate the data island and inject raw HTML. Escaping '<'
+    # as \u003c is JSON-safe (unescaped identically by JSON.parse) and HTML-safe.
+    payload = json.dumps(final, ensure_ascii=False, default=str).replace("<", "\\u003c")
     html = _REPORT_TEMPLATE.replace("/*__DATA__*/", payload)
     path.write_text(html, encoding="utf-8")
 
@@ -423,6 +426,8 @@ function render(){
     const det = document.createElement('tr');
     det.className='detail'; det.style.display='none';
     det.innerHTML = `<td colspan="8">${detailHtml(r)}</td>`;
+    const cb = det.querySelector('[data-contacted-key]');
+    if (cb) cb.onclick = e => { e.stopPropagation(); toggleContacted(cb.dataset.contactedKey); };
     tr.onclick = e => { if(e.target.tagName==='A') return;
       det.style.display = det.style.display==='none'?'':'none'; };
     body.appendChild(tr); body.appendChild(det);
@@ -451,7 +456,7 @@ function detailHtml(r){
    <h4>Connections at ${esc(r.company)} (${r.connection_count})</h4>
    <table class="conns"><tbody>${conns||'<tr><td class=muted>none</td></tr>'}</tbody></table>
    <h4>Description excerpt</h4><div class="muted">${esc(r.description_excerpt||'')}</div>
-   <p><button class="btn" onclick='toggleContacted(${JSON.stringify(key(r))})'>
+   <p><button class="btn" data-contacted-key="${esc(key(r))}">
      ${contacted[key(r)]?'✓ contacted — undo':'mark as contacted'}</button>
    &nbsp;<a href="${esc(r.url)}" target="_blank" rel="noopener">open listing ↗</a></p>`;
 }
@@ -483,8 +488,10 @@ function renderRecruiters(head, body){
       <div>Era</div><div>${esc(r.era||'none')}</div>
       <div>First / last DM</div><div class="muted">${esc(r.first_message_date||'—')} → ${esc(r.last_message_date||'—')}</div>
       <div>Connection score</div><div>${r.connection_score}</div>
-     </div><p><button class="btn" onclick='toggleContacted("rec|"+${JSON.stringify(r.profile_url)})'>
-      ${contacted['rec|'+r.profile_url]?'✓ contacted — undo':'mark as contacted'}</button></p></td>`;
+     </div><p><button class="btn" data-contacted-key="rec|${esc(r.profile_url)}">
+       ${contacted['rec|'+r.profile_url]?'✓ contacted — undo':'mark as contacted'}</button></p></td>`;
+    const rcb = det.querySelector('[data-contacted-key]');
+    if (rcb) rcb.onclick = e => { e.stopPropagation(); toggleContacted(rcb.dataset.contactedKey); };
     tr.onclick=e=>{if(e.target.tagName==='A')return;det.style.display=det.style.display==='none'?'':'none';};
     body.appendChild(tr); body.appendChild(det);
   });

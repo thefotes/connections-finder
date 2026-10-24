@@ -342,7 +342,7 @@ def parse_jobs_page(body: str) -> tuple[list[dict], int]:
     # must degrade to 0, not crash the stage-3 run.
     try:
         total = int(payload.get("total") or 0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: 1e999 -> inf
         total = 0
     return payload["jobPostings"], total
 
